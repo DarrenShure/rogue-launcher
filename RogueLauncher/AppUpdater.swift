@@ -133,13 +133,15 @@ final class AppUpdater: ObservableObject {
                 await MainActor.run { self.state = .installing("Signiere App ...") }
                 let signResult = shellRun("/usr/bin/codesign", args: ["--deep", "--force", "--sign", "-", dest.path])
 
-                await MainActor.run { self.state = .installing("Starte neu (codesign: \(signResult)) ...") }
+                await MainActor.run { self.state = .installing("Starte neu ...") }
 
-                // Neustart
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                // Neustart: Shell-Prozess spawnen, der nach Beenden die neue App öffnet
+                let relaunchProcess = Process()
+                relaunchProcess.executableURL = URL(fileURLWithPath: "/bin/zsh")
+                relaunchProcess.arguments = ["-c", "sleep 2 && open \"\(destPath)\""]
+                try? relaunchProcess.run()
+
                 await MainActor.run {
-                    let url = URL(fileURLWithPath: destPath)
-                    NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, _ in }
                     NSApp.terminate(nil)
                 }
             } catch {
