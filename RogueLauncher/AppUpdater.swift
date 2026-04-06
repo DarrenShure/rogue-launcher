@@ -75,37 +75,45 @@ final class AppUpdater: ObservableObject {
         state = .installing
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("RogueUpdate_\(UUID().uuidString)")
 
-        do {
-            try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
-            // Entpacken
-            let result = shell("unzip -q \"\(zipURL.path)\" -d \"\(tmp.path)\"")
-            guard result == 0 else { state = .error("Entpacken fehlgeschlagen (Code \(result))"); return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+                // Entpacken
+                let result = self.shell("unzip -q \"\(zipURL.path)\" -d \"\(tmp.path)\"")
+                guard result == 0 else {
+                    DispatchQueue.main.async { self.state = .error("Entpacken fehlgeschlagen (Code \(result))") }
+                    return
+                }
 
-            // .app finden
-            guard let appName = try FileManager.default.contentsOfDirectory(atPath: tmp.path)
-                    .first(where: { $0.hasSuffix(".app") })
-            else { state = .error(".app nicht im ZIP gefunden"); return }
+                // .app finden
+                guard let appName = try FileManager.default.contentsOfDirectory(atPath: tmp.path)
+                        .first(where: { $0.hasSuffix(".app") })
+                else {
+                    DispatchQueue.main.async { self.state = .error(".app nicht im ZIP gefunden") }
+                    return
+                }
 
-            let newApp = tmp.appendingPathComponent(appName)
+                let newApp = tmp.appendingPathComponent(appName)
 
-            // Alte App ersetzen
-            let dest = URL(fileURLWithPath: appPath)
-            if FileManager.default.fileExists(atPath: dest.path) {
-                try FileManager.default.removeItem(at: dest)
+                // Alte App ersetzen
+                let dest = URL(fileURLWithPath: self.appPath)
+                if FileManager.default.fileExists(atPath: dest.path) {
+                    try FileManager.default.removeItem(at: dest)
+                }
+                try FileManager.default.moveItem(at: newApp, to: dest)
+
+                // Signieren
+                self.shell("codesign --deep --force --sign - \"\(dest.path)\"")
+
+                // Neustart
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    let url = URL(fileURLWithPath: self.appPath)
+                    NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, _ in }
+                    NSApp.terminate(nil)
+                }
+            } catch {
+                DispatchQueue.main.async { self.state = .error(error.localizedDescription) }
             }
-            try FileManager.default.moveItem(at: newApp, to: dest)
-
-            // Signieren
-            shell("codesign --deep --force --sign - \"\(dest.path)\"")
-
-            // Neustart
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                let url = URL(fileURLWithPath: self.appPath)
-                NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, _ in }
-                NSApp.terminate(nil)
-            }
-        } catch {
-            state = .error(error.localizedDescription)
         }
     }
 
