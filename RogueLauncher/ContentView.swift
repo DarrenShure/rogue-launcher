@@ -51,6 +51,7 @@ struct ContentView: View {
     @State private var showingLocalImport = false
     @State private var showingSettings = false
     @State private var scriptRunning: UUID? = nil
+    @State private var pcTransitioning = false
     @State private var scriptResult: (UUID, Bool)? = nil
     @ObservedObject private var scriptStore = CustomScriptStore.shared
     @State private var isLaunching = false
@@ -296,18 +297,39 @@ struct ContentView: View {
 
                 if hasSleepButton {
                     Button(action: {
-                        if isOnline { sleepPC() } else { wakePC() }
+                        guard !pcTransitioning else { return }
+                        let wasOnline = isOnline
+                        pcTransitioning = true
+                        if wasOnline { sleepPC() } else { wakePC() }
+                        // Status pollen bis sich der Zustand ändert (max 90s)
+                        var elapsed = 0.0
+                        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { timer in
+                            elapsed += 2
+                            let changed = wasOnline ? !isOnline : isOnline
+                            if changed || elapsed >= 90 {
+                                timer.invalidate()
+                                pcTransitioning = false
+                            }
+                        }
                     }) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(isOnline ? Color.red.opacity(0.15) : Color.green.opacity(0.15))
+                                .fill(pcTransitioning ? Color.yellow.opacity(0.25) : (isOnline ? Color.red.opacity(0.15) : Color.green.opacity(0.15)))
                                 .frame(width: 28, height: 28)
-                            Image(systemName: "power")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(isOnline ? .red.opacity(0.8) : .green.opacity(0.8))
+                            if pcTransitioning {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .tint(.yellow)
+                                    .frame(width: 13, height: 13)
+                            } else {
+                                Image(systemName: "power")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(isOnline ? .red.opacity(0.8) : .green.opacity(0.8))
+                            }
                         }
                     }
                     .buttonStyle(.plain)
+                    .disabled(pcTransitioning)
                 }
 
 

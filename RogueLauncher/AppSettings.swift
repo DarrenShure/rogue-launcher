@@ -55,6 +55,9 @@ class AppSettings: ObservableObject {
     @Published var consolesEnabled: Bool = false
     @Published var emulatorsEnabled: Bool = false
 
+    // Autostart
+    @Published var startupItems: [StartupItem] = []
+
     // Chat
     @Published var chatEnabledServices: [String: Bool] = [:]   // service.rawValue -> enabled
     @Published var chatServiceMode: [String: String] = [:]      // service.rawValue -> "webview" | "app"
@@ -146,6 +149,8 @@ class AppSettings: ObservableObject {
         consolesEnabled = d.object(forKey: "consolesEnabled") as? Bool ?? false
         emulatorsEnabled = d.object(forKey: "emulatorsEnabled") as? Bool ?? false
         retroArchPath = d.string(forKey: "retroArchPath") ?? "/opt/homebrew/bin/retroarch"
+        if let data = d.data(forKey: "startupItems"),
+           let items = try? JSONDecoder().decode([StartupItem].self, from: data) { startupItems = items }
         if let map = d.object(forKey: "hdmiInputMap") as? [String: String] { hdmiInputMap = map }
         macInputNumber = d.integer(forKey: "macInputNumber") == 0 ? 15 : d.integer(forKey: "macInputNumber")
     }
@@ -213,6 +218,7 @@ class AppSettings: ObservableObject {
         d.set(chatEnabledServices, forKey: "chatEnabledServices")
         d.set(chatServiceMode, forKey: "chatServiceMode")
         d.set(retroArchPath, forKey: "retroArchPath")
+        if let data = try? JSONEncoder().encode(startupItems) { d.set(data, forKey: "startupItems") }
         d.set(hdmiInputMap, forKey: "hdmiInputMap")
         d.set(macInputNumber, forKey: "macInputNumber")
     }
@@ -221,4 +227,36 @@ class AppSettings: ObservableObject {
         guard let data = value as? Data, data.count == 6 else { return "" }
         return data.map { String(format: "%02X", $0) }.joined(separator: ":")
     }
+}
+
+// MARK: - Startup Item
+
+enum StartupType: String, Codable, CaseIterable {
+    case app = "app"
+    case webhook = "webhook"
+    case script = "script"
+
+    var label: String {
+        switch self {
+        case .app: return "App"
+        case .webhook: return "Webhook"
+        case .script: return "Script"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .app: return "app.badge.fill"
+        case .webhook: return "link"
+        case .script: return "terminal"
+        }
+    }
+}
+
+struct StartupItem: Codable, Identifiable {
+    var id: String = UUID().uuidString
+    var name: String
+    var type: StartupType
+    var path: String  // App-Pfad, Webhook-URL, oder Script-Pfad
+    var enabled: Bool = true
 }

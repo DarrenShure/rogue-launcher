@@ -1,5 +1,7 @@
 import Foundation
 import Combine
+import AppKit
+import UniformTypeIdentifiers
 
 class GameStore: ObservableObject {
     @Published var games: [Game] = []
@@ -16,6 +18,34 @@ class GameStore: ObservableObject {
         NotificationCenter.default.addObserver(forName: .init("UpdateGame"), object: nil, queue: .main) { [weak self] note in
             if let game = note.object as? Game { self?.update(game) }
         }
+        NotificationCenter.default.addObserver(forName: .init("exportLibrary"), object: nil, queue: .main) { [weak self] _ in
+            self?.exportLibrary()
+        }
+        NotificationCenter.default.addObserver(forName: .init("importLibrary"), object: nil, queue: .main) { [weak self] _ in
+            self?.importLibrary()
+        }
+    }
+
+    private func exportLibrary() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "RogueLauncher-Library.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if let data = try? JSONEncoder().encode(games) {
+            try? data.write(to: url)
+        }
+    }
+
+    private func importLibrary() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url,
+              let data = try? Data(contentsOf: url),
+              let imported = try? JSONDecoder().decode([Game].self, from: data)
+        else { return }
+        games = imported
+        save()
     }
 
     func save() {

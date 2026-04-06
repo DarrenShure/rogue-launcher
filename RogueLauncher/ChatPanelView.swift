@@ -155,8 +155,11 @@ struct ChatSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
-        ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                HStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 18)).foregroundColor(Color.rogueRed)
+                    Text("Chat").font(.system(size: 18, weight: .bold))
+                }
                 GroupBox {
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle").foregroundColor(.accentColor)
@@ -172,8 +175,6 @@ struct ChatSettingsView: View {
                     ChatServiceRow(service: service, settings: settings)
                 }
             }
-            .padding(24)
-        }
     }
 }
 

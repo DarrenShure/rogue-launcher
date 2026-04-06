@@ -13,6 +13,26 @@ struct RogueLauncherApp: App {
             directory:      cachesDir
         )
 
+        // Autostart-Items ausführen
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            for item in AppSettings.shared.startupItems where item.enabled {
+                switch item.type {
+                case .app:
+                    let url = URL(fileURLWithPath: item.path)
+                    NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+                case .webhook:
+                    AppSettings.fireWebhook(item.path)
+                case .script:
+                    let p = Process()
+                    p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+                    p.arguments = ["-c", item.path]
+                    p.standardOutput = FileHandle.nullDevice
+                    p.standardError = FileHandle.nullDevice
+                    try? p.run()
+                }
+            }
+        }
+
         // Prefetch GameDetail-Cache für installierte Spiele (im Hintergrund)
         DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 3) {
             let store = GameStore()

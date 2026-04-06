@@ -80,6 +80,9 @@ struct SettingsView: View {
     @State private var needsMigration = false
     @State private var migrationDone = false
 
+    // Autostart
+    @State private var showAddStartupItem = false
+
     // Bibliothek
     @State private var backupPath = ""
     @State private var nasURL = ""
@@ -106,9 +109,10 @@ struct SettingsView: View {
         ("moon.stars.fill",                  "Moonlight"),
         ("puzzlepiece.fill",                 "Rogue Helper"),
         ("terminal",                         "Scripte"),
+        ("server.rack",                      "Spiele Server"),
+        ("play.circle",                      "Startup"),
         ("sun.max.fill",                     "Sunshine"),
         ("info.circle",                      "Über_HIDDEN"),
-        ("server.rack",                      "Spiele Server"),
         ("arrow.down.circle",                 "Updates"),
     ]
 
@@ -151,22 +155,22 @@ struct SettingsView: View {
 
                 // Über — immer unten
                 Divider().padding(.bottom, 4)
-                Button(action: { selectedTab = 12 }) {
+                Button(action: { selectedTab = 14 }) {
                     HStack(spacing: 10) {
                         Image(systemName: "info.circle")
                             .font(.system(size: 14))
                             .frame(width: 20)
                         Text("Über")
-                            .font(.system(size: 13, weight: selectedTab == 12 ? .semibold : .regular))
+                            .font(.system(size: 13, weight: selectedTab == 14 ? .semibold : .regular))
                         Spacer()
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(selectedTab == 12 ? Color.rogueRed.opacity(0.15) : Color.clear)
+                            .fill(selectedTab == 14 ? Color.rogueRed.opacity(0.15) : Color.clear)
                     )
-                    .foregroundColor(selectedTab == 12 ? Color.rogueRed : .secondary)
+                    .foregroundColor(selectedTab == 14 ? Color.rogueRed : .secondary)
                 }
                 .buttonStyle(.plain)
 
@@ -199,10 +203,11 @@ struct SettingsView: View {
                         case 8:  tabMoonlight
                         case 9:  tabHelper
                         case 10: tabScripte
-                        case 11: tabSunshine
-                        case 12: tabUeber
-                        case 13: tabServer
-                        case 14: tabUpdates
+                        case 11: tabServer
+                        case 12: tabStartup
+                        case 13: tabSunshine
+                        case 14: tabUeber
+                        case 15: tabUpdates
                         default: tabBenutzer
                         }
                     }
@@ -557,6 +562,76 @@ struct SettingsView: View {
         MoonlightSettingsTab()
     }
 
+    // MARK: - Tab: Startup
+
+    var tabStartup: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            tabHeader("Startup", icon: "play.circle")
+
+            group("BEIM START AUSFÜHREN") {
+                if settings.startupItems.isEmpty {
+                    Text("Keine Startup-Einträge vorhanden.")
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                        .padding(.horizontal, 16)
+                } else {
+                    ForEach(Array(settings.startupItems.enumerated()), id: \.element.id) { idx, item in
+                        HStack(spacing: 12) {
+                            Toggle("", isOn: Binding(
+                                get: { settings.startupItems[idx].enabled },
+                                set: { val in settings.startupItems[idx].enabled = val; settings.save() }
+                            )).labelsHidden()
+
+                            Image(systemName: item.type.icon)
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                                .frame(width: 16)
+
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(item.name)
+                                    .font(.system(size: 12, weight: .medium))
+                                Text(item.path)
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer()
+
+                            Text(item.type.label)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color.secondary.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+
+                            Button(role: .destructive, action: {
+                                settings.startupItems.removeAll { $0.id == item.id }
+                                settings.save()
+                            }) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.red.opacity(0.7))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 16)
+                        if idx < settings.startupItems.count - 1 {
+                            Divider().padding(.horizontal, 16)
+                        }
+                    }
+                }
+            }
+
+            Button(action: { showAddStartupItem = true }) {
+                Label("Eintrag hinzufügen", systemImage: "plus.circle")
+            }
+            .buttonStyle(.bordered)
+            .sheet(isPresented: $showAddStartupItem) {
+                StartupItemSheet(settings: settings, isPresented: $showAddStartupItem)
+            }
+        }
+    }
+
     // MARK: - Tab: Benutzer
 
     var tabBenutzer: some View {
@@ -640,8 +715,8 @@ struct SettingsView: View {
     // MARK: - Tab: Emulatoren
 
     var tabEmulatoren: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
+                tabHeader("Emulatoren", icon: "cpu")
                 GroupBox {
                     Toggle(isOn: $settings.emulatorsEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -694,8 +769,6 @@ struct SettingsView: View {
                     .padding(.top, 4)
                 }
             }
-            .padding(24)
-        }
     }
 
     // MARK: - Tab: Launcher
@@ -1544,8 +1617,8 @@ struct SettingsView: View {
     @State private var showConsoleWizard = false
 
     var tabKonsolen: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
+                tabHeader("Konsolen", icon: "gamecontroller.fill")
                 // Enable Toggle
                 GroupBox {
                     Toggle(isOn: $settings.consolesEnabled) {
@@ -1563,12 +1636,13 @@ struct SettingsView: View {
                     }
                 }
 
-                // Voraussetzungen
-                GroupBox(label: Text("Voraussetzungen").font(.system(size: 12, weight: .semibold))) {
+                if settings.consolesEnabled {
+                group("VORAUSSETZUNGEN") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Für die Display-Umschaltung werden folgende Tools benötigt:")
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
+                            .padding(.horizontal, 16)
                         HStack(spacing: 6) {
                             Image(systemName: "terminal")
                                 .foregroundColor(.secondary)
@@ -1578,6 +1652,7 @@ struct SettingsView: View {
                         .padding(8)
                         .background(Color.secondary.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .padding(.horizontal, 16)
 
                         Button("Im Terminal öffnen") {
                             let script = "tell application \"Terminal\" to do script \"brew install m1ddc displayplacer\""
@@ -1585,12 +1660,11 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .padding(.horizontal, 16)
                     }
-                    .padding(.top, 4)
                 }
 
-                // Display-Einrichtung
-                GroupBox(label: Text("Display-Einrichtung").font(.system(size: 12, weight: .semibold))) {
+                group("DISPLAY-EINRICHTUNG") {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
@@ -1603,10 +1677,13 @@ struct SettingsView: View {
                         .padding(8)
                         .background(Color.orange.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(.horizontal, 16)
+
                         if settings.hdmiInputMap.isEmpty {
                             Text("Noch nicht eingerichtet. Starte den Wizard um deine Anschlüsse zuzuordnen.")
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
+                                .padding(.horizontal, 16)
                         } else {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(Array(settings.hdmiInputMap.keys.sorted()), id: \.self) { k in
@@ -1625,6 +1702,7 @@ struct SettingsView: View {
                                 }
                                 .font(.system(size: 12))
                             }
+                            .padding(.horizontal, 16)
                         }
 
                         Button(action: { showConsoleWizard = true }) {
@@ -1634,22 +1712,20 @@ struct SettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(Color.rogueRed)
                         .controlSize(.small)
+                        .padding(.horizontal, 16)
                         .sheet(isPresented: $showConsoleWizard) {
                             DisplaySetupWizard()
                         }
                     }
-                    .padding(.top, 4)
                 }
+                } // if consolesEnabled
             }
-            .padding(20)
-        }
     }
 
     // MARK: - Tab: Über
 
     var tabUeber: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 20) {
                 tabHeader("Über Rogue Launcher", icon: "info.circle")
 
                 // App Info
@@ -1705,7 +1781,6 @@ struct SettingsView: View {
             }
             .padding(16)
         }
-    }
 
     private func disclaimerRow(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
@@ -2477,8 +2552,7 @@ extension SettingsView {
     @MainActor
     var tabUpdates: some View {
         let updater = AppUpdater.shared
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+        return VStack(alignment: .leading, spacing: 20) {
                 tabHeader("Updates", icon: "arrow.down.circle")
 
                 // Aktuelle Version
@@ -2578,8 +2652,6 @@ extension SettingsView {
 
                 Spacer()
             }
-            .padding()
-        }
         .onAppear { updater.checkForUpdates() }
     }
 
@@ -2593,5 +2665,98 @@ extension SettingsView {
             if x != y { return x > y }
         }
         return false
+    }
+}
+
+// MARK: - Startup Item Sheet
+
+struct StartupItemSheet: View {
+    @ObservedObject var settings: AppSettings
+    @Binding var isPresented: Bool
+
+    @State private var name = ""
+    @State private var type: StartupType = .app
+    @State private var path = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Startup-Eintrag hinzufügen").font(.headline)
+
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Typ").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                    Picker("", selection: $type) {
+                        ForEach(StartupType.allCases, id: \.self) { t in
+                            Label(t.label, systemImage: t.icon).tag(t)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Name").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                    TextField(type == .app ? "z.B. Discord" : type == .webhook ? "z.B. PC aufwecken" : "z.B. Backup starten", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(type == .webhook ? "URL" : "Pfad").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
+                        Spacer()
+                        if type == .app {
+                            Button("App wählen…") { selectApp() }
+                                .buttonStyle(.bordered).controlSize(.small)
+                        } else if type == .script {
+                            Button("Datei wählen…") { selectScript() }
+                                .buttonStyle(.bordered).controlSize(.small)
+                        }
+                    }
+                    TextField(type == .app ? "/Applications/Discord.app" : type == .webhook ? "https://..." : "/usr/local/bin/myscript.sh", text: $path)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("Abbrechen") { isPresented = false }
+                    .keyboardShortcut(.escape)
+                Button("Hinzufügen") {
+                    let item = StartupItem(name: name, type: type, path: path)
+                    settings.startupItems.append(item)
+                    settings.save()
+                    isPresented = false
+                }
+                .keyboardShortcut(.return)
+                .buttonStyle(.borderedProminent)
+                .tint(Color.rogueRed)
+                .disabled(name.isEmpty || path.isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 440)
+    }
+
+    private func selectApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            path = url.path
+            if name.isEmpty {
+                name = url.deletingPathExtension().lastPathComponent
+            }
+        }
+    }
+
+    private func selectScript() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            path = url.path
+            if name.isEmpty {
+                name = url.deletingPathExtension().lastPathComponent
+            }
+        }
     }
 }
