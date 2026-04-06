@@ -78,8 +78,8 @@ final class AppUpdater: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
-                // Entpacken
-                let result = self.shell("unzip -q \"\(zipURL.path)\" -d \"\(tmp.path)\"")
+                // Entpacken (direkt ohne Shell, um Quoting-Probleme mit Temp-Pfaden zu vermeiden)
+                let result = self.run("/usr/bin/unzip", args: ["-q", zipURL.path, "-d", tmp.path])
                 guard result == 0 else {
                     DispatchQueue.main.async { self.state = .error("Entpacken fehlgeschlagen (Code \(result))") }
                     return
@@ -102,8 +102,8 @@ final class AppUpdater: ObservableObject {
                 }
                 try FileManager.default.moveItem(at: newApp, to: dest)
 
-                // Signieren
-                self.shell("codesign --deep --force --sign - \"\(dest.path)\"")
+                // Signieren (direkt ohne Shell)
+                self.run("/usr/bin/codesign", args: ["--deep", "--force", "--sign", "-", dest.path])
 
                 // Neustart
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
@@ -115,6 +115,16 @@ final class AppUpdater: ObservableObject {
                 DispatchQueue.main.async { self.state = .error(error.localizedDescription) }
             }
         }
+    }
+
+    @discardableResult
+    nonisolated private func run(_ executable: String, args: [String]) -> Int32 {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: executable)
+        p.arguments = args
+        try? p.run()
+        p.waitUntilExit()
+        return p.terminationStatus
     }
 
     @discardableResult
