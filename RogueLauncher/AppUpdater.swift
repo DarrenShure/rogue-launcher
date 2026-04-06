@@ -55,15 +55,33 @@ final class AppUpdater: ObservableObject {
         progress = 0
 
         let task = URLSession.shared.downloadTask(with: url) { [weak self] tmpURL, _, err in
+            // WICHTIG: Temp-Datei sofort sichern, bevor der Handler zurückkehrt,
+            // da URLSession die Datei danach löscht.
+            guard let self else { return }
+
+            if let err {
+                DispatchQueue.main.async { self.state = .error(err.localizedDescription) }
+                return
+            }
+            guard let tmpURL else {
+                DispatchQueue.main.async { self.state = .error("Download fehlgeschlagen") }
+                return
+            }
+
+            let savedZip = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("RogueUpdate_\(UUID().uuidString).zip")
+            do {
+                try FileManager.default.copyItem(at: tmpURL, to: savedZip)
+            } catch {
+                DispatchQueue.main.async { self.state = .error("ZIP konnte nicht gesichert werden: \(error.localizedDescription)") }
+                return
+            }
+
             DispatchQueue.main.async {
-                guard let self else { return }
-                if let err { self.state = .error(err.localizedDescription); return }
-                guard let tmpURL else { self.state = .error("Download fehlgeschlagen"); return }
-                self.install(zipURL: tmpURL)
+                self.install(zipURL: savedZip)
             }
         }
 
-        // Progress beobachten
         let observation = task.progress.observe(\.fractionCompleted) { [weak self] p, _ in
             DispatchQueue.main.async { self?.progress = p.fractionCompleted }
         }
@@ -74,14 +92,19 @@ final class AppUpdater: ObservableObject {
     private func install(zipURL: URL) {
         state = .installing
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("RogueUpdate_\(UUID().uuidString)")
+        let destPath = appPath
 
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
-                // Entpacken (direkt ohne Shell, um Quoting-Probleme mit Temp-Pfaden zu vermeiden)
-                let result = self.run("/usr/bin/unzip", args: ["-q", zipURL.path, "-d", tmp.path])
-                guard result == 0 else {
-                    DispatchQueue.main.async { self.state = .error("Entpacken fehlgeschlagen (Code \(result))") }
+
+                // Entpacken
+                let unzipResult = Self.run("/usr/bin/unzip", args: ["-o", "-q", zipURL.path, "-d", tmp.path])
+                // Temp-ZIP aufräumen
+                try? FileManager.default.removeItem(at: zipURL)
+
+                guard unzipResult == 0 else {
+                    DispatchQueue.main.async { self.state = .error("Entpacken fehlgeschlagen (Code \(unzipResult))") }
                     return
                 }
 
@@ -94,20 +117,20 @@ final class AppUpdater: ObservableObject {
                 }
 
                 let newApp = tmp.appendingPathComponent(appName)
+                let dest = URL(fileURLWithPath: destPath)
 
                 // Alte App ersetzen
-                let dest = URL(fileURLWithPath: self.appPath)
                 if FileManager.default.fileExists(atPath: dest.path) {
                     try FileManager.default.removeItem(at: dest)
                 }
                 try FileManager.default.moveItem(at: newApp, to: dest)
 
-                // Signieren (direkt ohne Shell)
-                self.run("/usr/bin/codesign", args: ["--deep", "--force", "--sign", "-", dest.path])
+                // Signieren
+                Self.run("/usr/bin/codesign", args: ["--deep", "--force", "--sign", "-", dest.path])
 
                 // Neustart
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    let url = URL(fileURLWithPath: self.appPath)
+                    let url = URL(fileURLWithPath: destPath)
                     NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, _ in }
                     NSApp.terminate(nil)
                 }
@@ -118,22 +141,17 @@ final class AppUpdater: ObservableObject {
     }
 
     @discardableResult
-    nonisolated private func run(_ executable: String, args: [String]) -> Int32 {
+    private static func run(_ executable: String, args: [String]) -> Int32 {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: executable)
         p.arguments = args
-        try? p.run()
-        p.waitUntilExit()
-        return p.terminationStatus
-    }
-
-    @discardableResult
-    nonisolated private func shell(_ cmd: String) -> Int32 {
-        let p = Process()
-        p.launchPath = "/bin/zsh"
-        p.arguments = ["-c", cmd]
-        p.launch(); p.waitUntilExit()
-        return p.terminationStatus
+        do {
+            try p.run()
+            p.waitUntilExit()
+            return p.terminationStatus
+        } catch {
+            return -1
+        }
     }
 }
 
