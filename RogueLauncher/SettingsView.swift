@@ -76,6 +76,10 @@ struct SettingsView: View {
     @State private var steamLogin2FACode = ""
     @State private var steamLoginPolling = false
 
+    // Migration
+    @State private var needsMigration = false
+    @State private var migrationDone = false
+
     // Bibliothek
     @State private var backupPath = ""
     @State private var nasURL = ""
@@ -222,6 +226,7 @@ struct SettingsView: View {
         .onAppear {
             populate()
             checkSteamLoginStatus()
+            checkMigrationNeeded()
         }
         .sheet(isPresented: $showAddLauncher) {
             LauncherEditSheet(launcher: GameLauncherConfig(
@@ -1184,6 +1189,29 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 20) {
             tabHeader("Import / Export", icon: "square.and.arrow.up.on.square")
 
+            if needsMigration {
+                group("DATENMIGRATION") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if migrationDone {
+                            Label("Migration abgeschlossen.", systemImage: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.system(size: 13))
+                                .padding(.horizontal, 16)
+                        } else {
+                            Text("Es wurden noch Pfade mit /MoonlightLibrary/ gefunden. Bitte migriere die Daten auf den neuen Speicherort.")
+                                .font(.system(size: 12)).foregroundColor(.secondary).padding(.horizontal, 16)
+                            Button(action: runMigration) {
+                                Label("Jetzt migrieren", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.orange)
+                            .padding(.horizontal, 16)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
             group("EINSTELLUNGEN EXPORTIEREN") {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Exportiert alle Einstellungen als JSON-Datei (ohne API-Keys).")
@@ -1275,6 +1303,50 @@ struct SettingsView: View {
 
     private func importLibrary() {
         NotificationCenter.default.post(name: Notification.Name("importLibrary"), object: nil)
+    }
+
+    private func checkMigrationNeeded() {
+        let gamesURL = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("RogueLauncher/games.json")
+        guard let data = try? Data(contentsOf: gamesURL),
+              let str = String(data: data, encoding: .utf8) else { return }
+        needsMigration = str.contains("MoonlightLibrary")
+    }
+
+    private func runMigration() {
+        let fm = FileManager.default
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+
+        // 1. games.json patchen
+        let gamesURL = appSupport.appendingPathComponent("RogueLauncher/games.json")
+        if let data = try? Data(contentsOf: gamesURL),
+           var str = String(data: data, encoding: .utf8) {
+            str = str.replacingOccurrences(of: "MoonlightLibrary\\/Covers", with: "RogueLauncher\\/Covers")
+            str = str.replacingOccurrences(of: "MoonlightLibrary/Covers", with: "RogueLauncher/Covers")
+            try? str.data(using: .utf8)?.write(to: gamesURL)
+        }
+
+        // 2. UserDefaults patchen
+        let defaults = UserDefaults(suiteName: "com.christian.Rogue") ?? UserDefaults.standard
+        for key in defaults.dictionaryRepresentation().keys {
+            if let val = defaults.string(forKey: key), val.contains("MoonlightLibrary") {
+                let fixed = val
+                    .replacingOccurrences(of: "MoonlightLibrary/Covers", with: "RogueLauncher/Covers")
+                defaults.set(fixed, forKey: key)
+            }
+        }
+        defaults.synchronize()
+
+        // 3. Ordner umbenennen
+        let oldFolder = appSupport.appendingPathComponent("MoonlightLibrary")
+        let newFolder = appSupport.appendingPathComponent("RogueLauncher")
+        if fm.fileExists(atPath: oldFolder.path) && !fm.fileExists(atPath: newFolder.path) {
+            try? fm.moveItem(at: oldFolder, to: newFolder)
+        }
+
+        migrationDone = true
+        needsMigration = false
     }
 
     // MARK: - Tab: Scripte
