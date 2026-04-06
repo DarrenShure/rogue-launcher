@@ -118,7 +118,7 @@ final class AppUpdater: ObservableObject {
     }
 
     @discardableResult
-    private func shell(_ cmd: String) -> Int32 {
+    nonisolated private func shell(_ cmd: String) -> Int32 {
         let p = Process()
         p.launchPath = "/bin/zsh"
         p.arguments = ["-c", cmd]
