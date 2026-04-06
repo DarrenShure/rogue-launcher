@@ -8,8 +8,6 @@ enum ChatService: String, CaseIterable, Identifiable {
     case element  = "element"
     case steam    = "steam"
     case discord  = "discord"
-    case signal   = "signal"
-    case telegram = "telegram"
     case whatsapp = "whatsapp"
 
     var id: String { rawValue }
@@ -19,8 +17,6 @@ enum ChatService: String, CaseIterable, Identifiable {
         case .element:  return "Element"
         case .steam:    return "Steam Chat"
         case .discord:  return "Discord"
-        case .signal:   return "Signal"
-        case .telegram: return "Telegram"
         case .whatsapp: return "WhatsApp"
         }
     }
@@ -30,8 +26,6 @@ enum ChatService: String, CaseIterable, Identifiable {
         case .element:  return Color(red: 0.0,  green: 1.0,  blue: 0.5)
         case .steam:    return Color(red: 0.75, green: 0.75, blue: 0.75)
         case .discord:  return Color(red: 0.55, green: 0.40, blue: 0.90)
-        case .signal:   return Color(red: 0.20, green: 0.55, blue: 0.95)
-        case .telegram: return Color(red: 0.16, green: 0.67, blue: 0.93)
         case .whatsapp: return Color(red: 0.07, green: 0.53, blue: 0.25)
         }
     }
@@ -41,8 +35,6 @@ enum ChatService: String, CaseIterable, Identifiable {
         case .element:  return "https://app.element.io"
         case .steam:    return "https://steamcommunity.com/chat"
         case .discord:  return "https://discord.com/app"
-        case .signal:   return "https://app.signal.org"
-        case .telegram: return "https://web.telegram.org"
         case .whatsapp: return "https://web.whatsapp.com"
         }
     }
@@ -52,20 +44,13 @@ enum ChatService: String, CaseIterable, Identifiable {
         case .element:  return "/Applications/Element.app"
         case .steam:    return "/Applications/Steam.app"
         case .discord:  return "/Applications/Discord.app"
-        case .signal:   return "/Applications/Signal.app"
-        case .telegram: return "/Applications/Telegram.app"
         case .whatsapp: return "/Applications/WhatsApp.app"
         }
     }
 
     var appInstalled: Bool { FileManager.default.fileExists(atPath: appPath) }
 
-    var icon: String {
-        switch self {
-        case .telegram: return "paperplane.fill"
-        default:        return "bubble.left.fill"
-        }
-    }
+    var icon: String { "bubble.left.fill" }
 }
 
 // MARK: - Chat Window Manager
@@ -97,21 +82,39 @@ class ChatWindowManager {
         return windows[service]?.isVisible == true
     }
 
+    private var navDelegates: [ChatService: WebViewNavDelegate] = [:]
+
     private func openWebView(_ service: ChatService) {
         let win = RoguePopupWindow(width: 960, height: 780, title: service.label)
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.mediaTypesRequiringUserActionForPlayback = []
-        config.preferences.setValue(true, forKey: "mediaDevicesEnabled")
-        config.preferences.setValue(true, forKey: "getUserMediaEnabled")
+        let prefs = WKWebpagePreferences()
+        prefs.allowsContentJavaScript = true
+        config.defaultWebpagePreferences = prefs
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        let navDelegate = WebViewNavDelegate()
+        wv.navigationDelegate = navDelegate
+        navDelegates[service] = navDelegate
         win.embedWebView(wv)
         if let url = URL(string: service.webURL) { wv.load(URLRequest(url: url)) }
         win.center()
         win.makeKeyAndOrderFront(nil)
-        win.delegate = WindowCloseDelegate(onClose: { [weak self] in self?.windows.removeValue(forKey: service) })
+        win.delegate = WindowCloseDelegate(onClose: { [weak self] in
+            self?.windows.removeValue(forKey: service)
+            self?.navDelegates.removeValue(forKey: service)
+        })
         windows[service] = win
+    }
+}
+
+class WebViewNavDelegate: NSObject, WKNavigationDelegate {
+    func webView(_ webView: WKWebView, webContentProcessDidTerminate: WKWebView) {
+        webView.reload()
+    }
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
+        .allow
     }
 }
 
