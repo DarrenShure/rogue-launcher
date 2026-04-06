@@ -135,15 +135,19 @@ final class AppUpdater: ObservableObject {
 
                 await MainActor.run { self.state = .installing("Starte neu ...") }
 
-                // Neustart: Shell-Prozess spawnen, der nach Beenden die neue App öffnet
+                // Neustart: Shell-Prozess wartet auf Beenden des aktuellen Prozesses, öffnet dann die neue App
+                let pid = ProcessInfo.processInfo.processIdentifier
+                let script = "while kill -0 \(pid) 2>/dev/null; do sleep 0.5; done; sleep 1; open \"\(destPath)\""
                 let relaunchProcess = Process()
                 relaunchProcess.executableURL = URL(fileURLWithPath: "/bin/zsh")
-                relaunchProcess.arguments = ["-c", "sleep 2 && open \"\(destPath)\""]
+                relaunchProcess.arguments = ["-c", script]
+                relaunchProcess.standardOutput = FileHandle.nullDevice
+                relaunchProcess.standardError = FileHandle.nullDevice
+                relaunchProcess.standardInput = FileHandle.nullDevice
                 try? relaunchProcess.run()
 
-                await MainActor.run {
-                    NSApp.terminate(nil)
-                }
+                // exit(0) statt NSApp.terminate — terminate wird durch modale Fenster blockiert
+                exit(0)
             } catch {
                 await MainActor.run { self.state = .error("Fehler: \(error.localizedDescription)") }
             }
