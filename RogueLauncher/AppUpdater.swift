@@ -14,7 +14,7 @@ final class AppUpdater: ObservableObject {
     @Published var progress: Double = 0
 
     enum UpdateState {
-        case idle, checking, upToDate, available, downloading, installing, error(String)
+        case idle, checking, upToDate, available, downloading, installing(String), error(String)
     }
 
     var currentVersion: String {
@@ -90,29 +90,32 @@ final class AppUpdater: ObservableObject {
     }
 
     private func install(zipURL: URL) {
-        state = .installing
+        state = .installing("Starte Installation ...")
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("RogueUpdate_\(UUID().uuidString)")
         let destPath = appPath
+        let zipSize = (try? FileManager.default.attributesOfItem(atPath: zipURL.path)[.size] as? Int) ?? 0
 
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task.detached(priority: .userInitiated) {
             do {
                 try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
 
                 // Entpacken
-                let unzipResult = Self.run("/usr/bin/unzip", args: ["-o", "-q", zipURL.path, "-d", tmp.path])
-                // Temp-ZIP aufräumen
+                await MainActor.run { self.state = .installing("Entpacke ZIP (\(zipSize / 1024) KB) ...") }
+                let unzipResult = shellRun("/usr/bin/unzip", args: ["-o", "-q", zipURL.path, "-d", tmp.path])
                 try? FileManager.default.removeItem(at: zipURL)
 
                 guard unzipResult == 0 else {
-                    DispatchQueue.main.async { self.state = .error("Entpacken fehlgeschlagen (Code \(unzipResult))") }
+                    await MainActor.run { self.state = .error("Entpacken fehlgeschlagen (Code \(unzipResult), ZIP: \(zipSize) Bytes)") }
                     return
                 }
 
                 // .app finden
+                await MainActor.run { self.state = .installing("Suche .app im Archiv ...") }
                 guard let appName = try FileManager.default.contentsOfDirectory(atPath: tmp.path)
                         .first(where: { $0.hasSuffix(".app") })
                 else {
-                    DispatchQueue.main.async { self.state = .error(".app nicht im ZIP gefunden") }
+                    let contents = (try? FileManager.default.contentsOfDirectory(atPath: tmp.path)) ?? []
+                    await MainActor.run { self.state = .error(".app nicht gefunden. Inhalt: \(contents.joined(separator: ", "))") }
                     return
                 }
 
@@ -120,38 +123,44 @@ final class AppUpdater: ObservableObject {
                 let dest = URL(fileURLWithPath: destPath)
 
                 // Alte App ersetzen
+                await MainActor.run { self.state = .installing("Ersetze alte App ...") }
                 if FileManager.default.fileExists(atPath: dest.path) {
                     try FileManager.default.removeItem(at: dest)
                 }
                 try FileManager.default.moveItem(at: newApp, to: dest)
 
                 // Signieren
-                Self.run("/usr/bin/codesign", args: ["--deep", "--force", "--sign", "-", dest.path])
+                await MainActor.run { self.state = .installing("Signiere App ...") }
+                let signResult = shellRun("/usr/bin/codesign", args: ["--deep", "--force", "--sign", "-", dest.path])
+
+                await MainActor.run { self.state = .installing("Starte neu (codesign: \(signResult)) ...") }
 
                 // Neustart
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+                await MainActor.run {
                     let url = URL(fileURLWithPath: destPath)
                     NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, _ in }
                     NSApp.terminate(nil)
                 }
             } catch {
-                DispatchQueue.main.async { self.state = .error(error.localizedDescription) }
+                await MainActor.run { self.state = .error("Fehler: \(error.localizedDescription)") }
             }
         }
     }
 
-    @discardableResult
-    private static func run(_ executable: String, args: [String]) -> Int32 {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: executable)
-        p.arguments = args
-        do {
-            try p.run()
-            p.waitUntilExit()
-            return p.terminationStatus
-        } catch {
-            return -1
-        }
+}
+
+@discardableResult
+private func shellRun(_ executable: String, args: [String]) -> Int32 {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: executable)
+    p.arguments = args
+    do {
+        try p.run()
+        p.waitUntilExit()
+        return p.terminationStatus
+    } catch {
+        return -1
     }
 }
 

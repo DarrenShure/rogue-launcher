@@ -2546,8 +2546,8 @@ extension SettingsView {
                                     .foregroundColor(.secondary)
                             }
 
-                        case .installing:
-                            Label("Installiere Update ...", systemImage: "gear")
+                        case .installing(let step):
+                            Label(step, systemImage: "gear")
                             ProgressView()
 
                         case .error(let msg):
