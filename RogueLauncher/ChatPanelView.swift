@@ -5,50 +5,68 @@ import AppKit
 // MARK: - Chat Service
 
 enum ChatService: String, CaseIterable, Identifiable {
-    case element  = "element"
-    case steam    = "steam"
     case discord  = "discord"
+    case element  = "element"
+    case lecord   = "lecord"
+    case steam    = "steam"
+    case teamspeak = "teamspeak"
     case whatsapp = "whatsapp"
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .element:  return "Element"
-        case .steam:    return "Steam Chat"
-        case .discord:  return "Discord"
-        case .whatsapp: return "WhatsApp"
+        case .discord:   return "Discord"
+        case .element:   return "Element"
+        case .lecord:    return "Lecord"
+        case .steam:     return "Steam Chat"
+        case .teamspeak: return "TeamSpeak"
+        case .whatsapp:  return "WhatsApp"
         }
     }
 
     var color: Color {
         switch self {
-        case .element:  return Color(red: 0.0,  green: 1.0,  blue: 0.5)
-        case .steam:    return Color(red: 0.75, green: 0.75, blue: 0.75)
-        case .discord:  return Color(red: 0.55, green: 0.40, blue: 0.90)
-        case .whatsapp: return Color(red: 0.07, green: 0.53, blue: 0.25)
+        case .discord:   return Color(red: 0.55, green: 0.40, blue: 0.90)
+        case .element:   return Color(red: 0.0,  green: 1.0,  blue: 0.5)
+        case .lecord:    return Color(red: 0.60, green: 0.30, blue: 0.90)
+        case .steam:     return Color(red: 0.75, green: 0.75, blue: 0.75)
+        case .teamspeak: return Color(red: 0.20, green: 0.45, blue: 0.75)
+        case .whatsapp:  return Color(red: 0.07, green: 0.53, blue: 0.25)
         }
     }
 
     var webURL: String {
         switch self {
-        case .element:  return "https://app.element.io"
-        case .steam:    return "https://steamcommunity.com/chat"
-        case .discord:  return "https://discord.com/app"
-        case .whatsapp: return "https://web.whatsapp.com"
+        case .discord:   return "https://discord.com/app"
+        case .element:   return "https://app.element.io"
+        case .lecord:    return ""
+        case .steam:     return "https://steamcommunity.com/chat"
+        case .teamspeak: return ""
+        case .whatsapp:  return "https://web.whatsapp.com"
         }
     }
 
     var appPath: String {
         switch self {
-        case .element:  return "/Applications/Element.app"
-        case .steam:    return "/Applications/Steam.app"
-        case .discord:  return "/Applications/Discord.app"
-        case .whatsapp: return "/Applications/WhatsApp.app"
+        case .discord:   return "/Applications/Discord.app"
+        case .element:   return "/Applications/Element.app"
+        case .lecord:    return "/Applications/Lecord.app"
+        case .steam:     return "/Applications/Steam.app"
+        case .teamspeak: return "/Applications/TeamSpeak 3 Client.app"
+        case .whatsapp:  return "/Applications/WhatsApp.app"
         }
     }
 
     var appInstalled: Bool { FileManager.default.fileExists(atPath: appPath) }
+
+    /// Dienste die nur als Desktop-App funktionieren (kein WebView)
+    var appOnly: Bool {
+        switch self {
+        case .lecord, .teamspeak: return true
+        default: return false
+        }
+    }
 
     var icon: String { "bubble.left.fill" }
 }
@@ -60,7 +78,7 @@ class ChatWindowManager {
     private var windows: [ChatService: NSWindow] = [:]
 
     func toggle(_ service: ChatService) {
-        let mode = AppSettings.shared.chatServiceMode[service.rawValue] ?? "webview"
+        let mode = service.appOnly ? "app" : (AppSettings.shared.chatServiceMode[service.rawValue] ?? "webview")
         if mode == "app" {
             NSWorkspace.shared.openApplication(
                 at: URL(fileURLWithPath: service.appPath),
@@ -77,12 +95,13 @@ class ChatWindowManager {
     }
 
     func isOpen(_ service: ChatService) -> Bool {
-        let mode = AppSettings.shared.chatServiceMode[service.rawValue] ?? "webview"
+        let mode = service.appOnly ? "app" : (AppSettings.shared.chatServiceMode[service.rawValue] ?? "webview")
         if mode == "app" { return false }
         return windows[service]?.isVisible == true
     }
 
     private var navDelegates: [ChatService: WebViewNavDelegate] = [:]
+    private var closeDelegates: [ChatService: WindowCloseDelegate] = [:]
 
     private func openWebView(_ service: ChatService) {
         let win = RoguePopupWindow(width: 960, height: 780, title: service.label)
@@ -101,10 +120,13 @@ class ChatWindowManager {
         if let url = URL(string: service.webURL) { wv.load(URLRequest(url: url)) }
         win.center()
         win.makeKeyAndOrderFront(nil)
-        win.delegate = WindowCloseDelegate(onClose: { [weak self] in
+        let closeDelegate = WindowCloseDelegate(onClose: { [weak self] in
             self?.windows.removeValue(forKey: service)
             self?.navDelegates.removeValue(forKey: service)
+            self?.closeDelegates.removeValue(forKey: service)
         })
+        win.delegate = closeDelegate
+        closeDelegates[service] = closeDelegate
         windows[service] = win
     }
 }
@@ -183,7 +205,7 @@ struct ChatServiceRow: View {
     @ObservedObject var settings: AppSettings
 
     private var isEnabled: Bool { settings.chatEnabledServices[service.rawValue] ?? false }
-    private var mode: String { settings.chatServiceMode[service.rawValue] ?? "webview" }
+    private var mode: String { service.appOnly ? "app" : (settings.chatServiceMode[service.rawValue] ?? "webview") }
 
     var body: some View {
         GroupBox {
@@ -216,13 +238,22 @@ struct ChatServiceRow: View {
 
                 if isEnabled {
                     Divider()
-                    // Modus-Picker
-                    HStack(spacing: 0) {
-                        modePill("webview", label: "WebView", icon: "globe")
-                        modePill("app",     label: "Desktop App", icon: "desktopcomputer")
+                    if service.appOnly {
+                        // Nur App-Modus verfügbar
+                        HStack(spacing: 6) {
+                            Image(systemName: "desktopcomputer").font(.system(size: 11)).foregroundColor(.secondary)
+                            Text("Nur als Desktop App verfügbar")
+                                .font(.system(size: 11)).foregroundColor(.secondary)
+                        }
+                    } else {
+                        // Modus-Picker
+                        HStack(spacing: 0) {
+                            modePill("webview", label: "WebView", icon: "globe")
+                            modePill("app",     label: "Desktop App", icon: "desktopcomputer")
+                        }
+                        .background(Color.secondary.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
-                    .background(Color.secondary.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
 
                     if mode == "app" {
                         HStack(spacing: 6) {

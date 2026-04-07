@@ -600,7 +600,9 @@ struct HomeView: View {
                 ZStack(alignment: .topTrailing) {
                     Group {
                         if let img = game.coverImage {
-                            Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+                            Color.clear.overlay(
+                                Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+                            )
                         } else {
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.secondary.opacity(0.15))
@@ -622,7 +624,8 @@ struct HomeView: View {
                 Text(game.name)
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(2).multilineTextAlignment(.center)
-                    .frame(width: 110).foregroundColor(.primary)
+                    .frame(width: 110, height: 28, alignment: .top)
+                    .foregroundColor(.primary)
             }
         }
         .buttonStyle(.plain)

@@ -160,9 +160,10 @@ private struct LauncherCard: View {
                     .foregroundColor(.primary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
+                    .frame(height: 32, alignment: .top)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
+            .frame(height: 130)
             .padding(.horizontal, 16)
             .background(
                 RoundedRectangle(cornerRadius: 12)
