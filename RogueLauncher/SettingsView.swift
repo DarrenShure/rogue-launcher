@@ -1439,7 +1439,7 @@ struct SettingsView: View {
     let commonSymbols = [
         "terminal", "bolt.fill", "play.fill", "arrow.clockwise",
         "laptopcomputer",
-        "trash", "folder", "doc", "wrench.and.screwdriver",
+        "house", "folder", "doc", "wrench.and.screwdriver",
         "gear", "cpu", "network", "wifi", "display",
         "powerplug", "gamecontroller", "music.note", "camera"
     ]
@@ -2430,7 +2430,7 @@ struct ScriptEditSheetWrapper: View {
     let commonSymbols = [
         "terminal", "bolt.fill", "play.fill", "arrow.clockwise",
         "laptopcomputer",
-        "trash", "folder", "doc", "wrench.and.screwdriver",
+        "house", "folder", "doc", "wrench.and.screwdriver",
         "gear", "cpu", "network", "wifi", "display",
         "powerplug", "gamecontroller", "music.note", "camera"
     ]
