@@ -115,7 +115,7 @@ struct HomeView: View {
     @ObservedObject private var monitor = PCStatusMonitor.shared
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var shopStore = ShopStore.shared
-    @State private var heroLibGame: Game? = nil
+    // heroLibGame entfernt — nur noch featureLibGames
     @State private var featureLibGames: [Game] = []
     @State private var refreshTimer: Timer? = nil
     @State private var activeTab: HomeTab = .start
@@ -209,7 +209,7 @@ struct HomeView: View {
         }
         .onDisappear { refreshTimer?.invalidate() }
         .onChange(of: store.games.count) { _, _ in
-            if heroLibGame == nil { pickFeaturedGames() }
+            if featureLibGames.isEmpty { pickFeaturedGames() }
         }
     }
 
@@ -300,15 +300,12 @@ struct HomeView: View {
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        if let hero = heroLibGame {
-                            heroSection(hero, width: geo.size.width - 32)
-                                .padding(.horizontal, 16)
-                                .padding(.top, 16)
-                        }
                         VStack(alignment: .leading, spacing: 24) {
                             if !featureLibGames.isEmpty {
                                 HStack(spacing: 12) {
-                                    ForEach(featureLibGames) { game in featureTile(game) }
+                                    ForEach(Array(featureLibGames.enumerated()), id: \.element.id) { idx, game in
+                                        featureTile(game, isFirst: idx == 0)
+                                    }
                                 }
                                 .padding(.top, 16)
                             }
@@ -518,124 +515,78 @@ struct HomeView: View {
         let fallback = store.games.filter { g in !hidden.contains { g.name.lowercased().contains($0) } }.shuffled()
         let source = pool.isEmpty ? fallback : pool
         guard !source.isEmpty else { return }
-        // Hero nur wenn >3 Spiele
-        if source.count > 3 {
-            heroLibGame = source.first
-            featureLibGames = Array(source.dropFirst().prefix(3))
-        } else {
-            heroLibGame = nil
-            featureLibGames = Array(source.prefix(3))
-        }
+        featureLibGames = Array(source.prefix(3))
     }
 
-    // MARK: - Hero Section
+    // MARK: - Feature Tile
 
-    private func heroSection(_ game: Game, width: CGFloat) -> some View {
+    private func featureTile(_ game: Game, isFirst: Bool = false) -> some View {
         Button(action: { onSelect(game) }) {
-            ZStack(alignment: .bottomLeading) {
-                Group {
-                    if let img = game.backgroundImage ?? game.coverImage {
-                        Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
-                    } else {
-                        LinearGradient(colors: [Color.rogueNavy, Color.rogueBlue.opacity(0.5)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+            GeometryReader { tileGeo in
+                ZStack(alignment: .bottomLeading) {
+                    // Wallpaper zentriert — exakte Breite aus GeometryReader
+                    Group {
+                        if let img = game.backgroundImage ?? game.coverImage {
+                            Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+                        } else {
+                            LinearGradient(colors: [Color.rogueNavy, Color.rogueBlue.opacity(0.5)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                        }
                     }
-                }
-                .frame(width: width, height: 220).clipped()
+                    .frame(width: tileGeo.size.width, height: 280)
+                    .clipped()
 
-                LinearGradient(colors: [.clear, .black.opacity(0.85)],
-                               startPoint: .center, endPoint: .bottom).frame(height: 220)
+                    // Dunkler Gradient von unten
+                    LinearGradient(colors: [.clear, .clear, .black.opacity(0.7), .black.opacity(0.9)],
+                                   startPoint: .top, endPoint: .bottom)
 
-                HStack(alignment: .bottom, spacing: 12) {
-                    if let cover = game.coverImage {
-                        Image(nsImage: cover).resizable().aspectRatio(contentMode: .fill)
-                            .frame(width: 60, height: 80)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .shadow(radius: 8)
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            Text("EMPFOHLEN")
-                                .font(.system(size: 9, weight: .bold)).tracking(1.8)
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 7).padding(.vertical, 3)
-                                .background(Color.yellow)
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
-                            if !game.genre.isEmpty {
-                                Text(game.genre.uppercased())
-                                    .font(.system(size: 9, weight: .semibold)).tracking(1.2)
-                                    .foregroundColor(.white.opacity(0.6))
+                    // Content unten
+                    VStack(alignment: .leading, spacing: 0) {
+                        Spacer()
+                        HStack(alignment: .bottom, spacing: 12) {
+                            if let cover = game.coverImage {
+                                Image(nsImage: cover).resizable().aspectRatio(contentMode: .fill)
+                                    .frame(width: 70, height: 95)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .shadow(radius: 6)
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Text("EMPFOHLEN")
+                                        .font(.system(size: 9, weight: .bold)).tracking(1.8)
+                                        .foregroundColor(.black)
+                                        .padding(.horizontal, 7).padding(.vertical, 3)
+                                        .background(Color.yellow)
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    if !game.genre.isEmpty {
+                                        Text(game.genre.uppercased())
+                                            .font(.system(size: 9, weight: .semibold)).tracking(1.2)
+                                            .foregroundColor(.white.opacity(0.6))
+                                            .lineLimit(1)
+                                    }
+                                }
+                                Text(game.name)
+                                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                                    .lineLimit(1)
+                                if !game.description.isEmpty {
+                                    Text(game.description)
+                                        .font(.system(size: 11)).foregroundColor(.white.opacity(0.65))
+                                        .lineLimit(2)
+                                }
+                                Label("Zur Spielseite", systemImage: "arrow.right.circle.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.18))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
                         }
-                        Text(game.name)
-                            .font(.system(size: 22, weight: .bold)).foregroundColor(.white)
-                        if !game.description.isEmpty {
-                            Text(game.description)
-                                .font(.system(size: 11)).foregroundColor(.white.opacity(0.65)).lineLimit(2)
-                        }
+                        .padding(16)
                     }
-                    Spacer()
-                    Label("Zur Spielseite", systemImage: "arrow.right.circle.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(Color.white.opacity(0.18))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .padding(.bottom, 4)
                 }
-                .padding(20)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
             }
-            .frame(height: 220)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-        }
-        .buttonStyle(.plain)
-        .cursor(.pointingHand)
-    }
-
-    private func featureTile(_ game: Game) -> some View {
-        Button(action: { onSelect(game) }) {
-            ZStack(alignment: .bottomLeading) {
-                Group {
-                    if let img = game.backgroundImage ?? game.coverImage {
-                        Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
-                    } else {
-                        LinearGradient(colors: [Color.rogueNavy.opacity(0.8), Color.rogueBlue.opacity(0.4)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
-                    }
-                }
-                .frame(height: 130).clipped()
-
-                LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
-
-                HStack(alignment: .bottom, spacing: 10) {
-                    if let cover = game.coverImage {
-                        Image(nsImage: cover).resizable().aspectRatio(contentMode: .fill)
-                            .frame(width: 46, height: 62)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .shadow(radius: 4)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        if !game.genre.isEmpty {
-                            Text(game.genre.uppercased())
-                                .font(.system(size: 8, weight: .bold)).tracking(1.2)
-                                .foregroundColor(.white.opacity(0.55))
-                        }
-                        Text(game.name)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white).lineLimit(1)
-                    }
-                    Spacer()
-                    Label("Zur Spielseite", systemImage: "arrow.right.circle.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Color.white.opacity(0.18))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .padding(10)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .frame(maxWidth: .infinity).frame(height: 130)
+            .frame(maxWidth: .infinity).frame(height: 280)
         }
         .buttonStyle(.plain)
         .cursor(.pointingHand)
