@@ -18,7 +18,7 @@ enum ChatService: String, CaseIterable, Identifiable {
         switch self {
         case .discord:   return "Discord"
         case .element:   return "Element"
-        case .lecord:    return "Lecord"
+        case .lecord:    return "Legcord"
         case .steam:     return "Steam Chat"
         case .teamspeak: return "TeamSpeak"
         case .whatsapp:  return "WhatsApp"
@@ -51,7 +51,7 @@ enum ChatService: String, CaseIterable, Identifiable {
         switch self {
         case .discord:   return "/Applications/Discord.app"
         case .element:   return "/Applications/Element.app"
-        case .lecord:    return "/Applications/Lecord.app"
+        case .lecord:    return "/Applications/Legcord.app"
         case .steam:     return "/Applications/Steam.app"
         case .teamspeak: return "/Applications/TeamSpeak 3 Client.app"
         case .whatsapp:  return "/Applications/WhatsApp.app"
